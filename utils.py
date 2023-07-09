@@ -113,7 +113,7 @@ def superuser_list(func):
     return wrapper
 
 
-async def publish_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def publish_post(update: Update, context: ContextTypes.DEFAULT_TYPE, review: bool):
 
     post = ""
 
@@ -142,20 +142,27 @@ async def publish_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
         post += f"*Прочее*: {other}\n"
 
     if images:
-        post += f"*Автор*: {username}"
+        post += f"*Автор*: {full_name}(@{username})\n"
 
         input_medias = []
         for image_id in context.user_data["images"]:
             input_media = InputMediaPhoto(media=image_id)
             input_medias.append(input_media)
 
-        await context.bot.send_media_group(chat_id=update.effective_chat.id, media=input_medias, caption=post,
-                                           parse_mode=ParseMode.MARKDOWN)
+        if review:
+            await context.bot.send_media_group(chat_id=update.effective_chat.id, media=input_medias, caption=post,
+                                               parse_mode=ParseMode.MARKDOWN)
+        else:
+            await context.bot.send_media_group(chat_id="-1001592120085", media=input_medias, caption=post,
+                                               parse_mode=ParseMode.MARKDOWN)
 
     elif post:
         post += f"*Автор*: {full_name}(@{username})\n"
 
-        await context.bot.send_message(chat_id=update.effective_chat.id, text=post, parse_mode=ParseMode.MARKDOWN)
+        if review:
+            await context.bot.send_message(chat_id=update.effective_chat.id, text=post, parse_mode=ParseMode.MARKDOWN)
+        else:
+            await context.bot.send_message(chat_id="-1001592120085", text=post, parse_mode=ParseMode.MARKDOWN)
 
     else:
         return 0

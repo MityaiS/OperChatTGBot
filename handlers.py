@@ -18,7 +18,7 @@ async def gathering_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if ans:
 
             if ans.lower() == "да":
-                published = await publish_post(update, context)
+                published = await publish_post(update, context, review=False)
                 if published:
                     await update.message.reply_text("Пост опубликован!")
                     username = update.effective_user.username
@@ -39,6 +39,7 @@ async def gathering_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
             else:
                 await update.message.reply_text(f"Дополнительная инф-ция - {other}")
 
+            await publish_post(update, context, review=True)
             await update.message.reply_text("Публикуем пост?(Да/нет)")
 
     elif "allow_images" in context.user_data and not context.user_data["allow_images"]:
