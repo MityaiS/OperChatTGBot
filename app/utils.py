@@ -1,16 +1,16 @@
 from telegram import Update, InputMediaPhoto
 from telegram.ext import ContextTypes
 from telegram.constants import ParseMode
-from config import session, logger
+from config import Session, logger
 from models import User
 
 
-def user_exists(username):
+def user_exists(username, session):
     existing_user = session.query(User).filter_by(username=username).first()
     return existing_user is not None
 
 
-def add_user_to_db(username):
+def add_user_to_db(username, session):
     user_db = User(username=username)
     session.add(user_db)
     session.commit()
@@ -53,11 +53,11 @@ async def get_text_and_image(update: Update, context: ContextTypes.DEFAULT_TYPE)
     return None
 
 
-def get_all_users():
+def get_all_users(session):
     return session.query(User).all()
 
 
-def remove_users_from_db(usernames):
+def remove_users_from_db(usernames, session):
 
     results = []
 
@@ -77,11 +77,11 @@ def remove_users_from_db(usernames):
 
 def white_list(func):
 
-    async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE, session: Session):
         username = update.effective_user.username
 
-        if user_exists(username):
-            return await func(update, context)
+        if user_exists(username, session):
+            return await func(update, context, session)
         else:
             text = """Ты не был добавлен в белый список. Попроси администратора, чтобы тебя добавили.
 Как добавят, напиши /start"""
@@ -92,18 +92,18 @@ def white_list(func):
     return wrapper
 
 
-def is_superuser(username):
+def is_superuser(username, session):
     user = session.query(User).filter_by(username=username).first()
     return user is not None and user.superuser
 
 
 def superuser_list(func):
 
-    async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE, session: Session):
         username = update.effective_user.username
 
-        if is_superuser(username):
-            return await func(update, context)
+        if is_superuser(username, session):
+            return await func(update, context, session)
         else:
             text = "Вы не супер-пользоваталь. Мне очень жаль)"
             await context.bot.send_message(chat_id=update.message.chat_id, text=text)
@@ -168,3 +168,21 @@ async def publish_post(update: Update, context: ContextTypes.DEFAULT_TYPE, revie
         return 0
 
     return 1
+
+
+def db_session(bot_handler):
+
+    def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        session = Session()
+
+        try:
+            result = bot_handler(update, context, session)
+            session.commit()
+            return result
+        except Exception as e:
+            session.rollback()
+            raise e
+        finally:
+            session.close()
+
+    return wrapper

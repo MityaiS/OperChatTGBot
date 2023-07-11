@@ -1,11 +1,12 @@
 FROM python
 
 RUN mkdir -p /home/OperChatBot
-COPY . /home/OperChatBot
+COPY ./app /home/OperChatBot/app
 
 WORKDIR /home/OperChatBot
 
-RUN pip install -r requirements.txt
-RUN touch botdb.db
+RUN pip install -r app/requirements.txt
+RUN mkdir db
+RUN touch db/botdb.db
 
-CMD ["python", "app.py"]
+CMD ["python", "app/app.py"]

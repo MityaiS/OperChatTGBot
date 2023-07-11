@@ -9,18 +9,18 @@ token = os.environ.get("OperChatBotToken")
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO,
-    filename="log.log",
+    filename="db/log.log",
 )
 
 logger = logging.getLogger("manual")
 
-engine = create_engine('sqlite:///botdb.db')
+engine = create_engine('sqlite:///db/botdb.db')
 Base.metadata.create_all(engine)
 Session = sessionmaker(bind=engine)
-session = Session()
 
 superusers = ["MityaiS", "av_shatrov", "shefoff"]
 
+session = Session()
 for username in superusers:
     user = session.query(User).filter_by(username=username).first()
     if not user:
@@ -28,3 +28,4 @@ for username in superusers:
         session.add(new_user)
         session.commit()
         logger.info(f"Added {username} to superusers")
+session.close()

@@ -1,0 +1,9 @@
+version: "3"
+services:
+  operchat_bot:
+    image: nizhnikov/oper_chat_tg_bot
+    environment:
+      - OperChatBotToken=VAR
+    restart: always
+    volumes:
+      - /home/user/var/oper_chat_bot:/home/OperChatBot/db
