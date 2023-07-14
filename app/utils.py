@@ -1,7 +1,7 @@
 from telegram import Update, InputMediaPhoto
 from telegram.ext import ContextTypes
 from telegram.constants import ParseMode
-from config import Session, logger
+from config import Session, logger, target
 from models import User
 
 
@@ -24,8 +24,7 @@ async def send_init_mes(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                    "составление заявки заново, оправь мне **/reset**. Если нужно пропустить поле, "
                                    "напиши '.'", parse_mode=ParseMode.MARKDOWN)
 
-    await context.bot.send_message(chat_id=update.effective_chat.id, text="Напиши название клиента...",
-                                   parse_mode=ParseMode.MARKDOWN)
+    await context.bot.send_message(chat_id=update.effective_chat.id, text="Напиши название клиента...")
     context.user_data.clear()
     logger.info(f"Sent init message to {update.effective_user.username}")
 
@@ -113,20 +112,33 @@ def superuser_list(func):
     return wrapper
 
 
+def escape_markdown(text):
+    if not text:
+        return None
+    escaped_text = ""
+    markdown_chars = ['\\', '`', '*', '_', '{', '}', '[', ']', '(', ')', '#', '+', '-', '.', '!']
+    for char in text:
+        if char in markdown_chars:
+            escaped_text += '\\' + char
+        else:
+            escaped_text += char
+    return escaped_text
+
+
 async def publish_post(update: Update, context: ContextTypes.DEFAULT_TYPE, review: bool):
 
     post = ""
 
-    client = context.user_data["client"]
-    what_to_do = context.user_data["what_to_do"]
+    client = escape_markdown(context.user_data["client"])
+    what_to_do = escape_markdown(context.user_data["what_to_do"])
     images = "images" in context.user_data
-    sensors = context.user_data["sensors"]
-    other = context.user_data["other"]
+    sensors = escape_markdown(context.user_data["sensors"])
+    other = escape_markdown(context.user_data["other"])
 
     user = update.effective_user
-    username = user.username
-    first_name = user.first_name
-    last_name = user.last_name
+    username = escape_markdown(user.username)
+    first_name = escape_markdown(user.first_name)
+    last_name = escape_markdown(user.last_name)
     full_name = f"{first_name} {last_name}" if last_name else first_name
 
     if what_to_do:
@@ -143,6 +155,7 @@ async def publish_post(update: Update, context: ContextTypes.DEFAULT_TYPE, revie
 
     if images:
         post += f"*Автор*: {full_name}(@{username})\n"
+        logger.info(post)
 
         input_medias = []
         for image_id in context.user_data["images"]:
@@ -153,16 +166,17 @@ async def publish_post(update: Update, context: ContextTypes.DEFAULT_TYPE, revie
             await context.bot.send_media_group(chat_id=update.effective_chat.id, media=input_medias, caption=post,
                                                parse_mode=ParseMode.MARKDOWN)
         else:
-            await context.bot.send_media_group(chat_id="-1001592120085", media=input_medias, caption=post,
+            await context.bot.send_media_group(chat_id=target, media=input_medias, caption=post,
                                                parse_mode=ParseMode.MARKDOWN)
 
     elif post:
         post += f"*Автор*: {full_name}(@{username})\n"
+        logger.info(post)
 
         if review:
             await context.bot.send_message(chat_id=update.effective_chat.id, text=post, parse_mode=ParseMode.MARKDOWN)
         else:
-            await context.bot.send_message(chat_id="-1001592120085", text=post, parse_mode=ParseMode.MARKDOWN)
+            await context.bot.send_message(chat_id=target, text=post, parse_mode=ParseMode.MARKDOWN)
 
     else:
         return 0

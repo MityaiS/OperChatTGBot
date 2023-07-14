@@ -1,10 +1,13 @@
 import logging
 import os
+from dotenv import load_dotenv
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from models import Base, User
 
+load_dotenv()
 token = os.environ.get("OperChatBotToken")
+target = os.getenv("OperChatTarget")
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
