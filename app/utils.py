@@ -1,19 +1,70 @@
+from enum import Enum
 from telegram import Update, InputMediaPhoto
 from telegram.ext import ContextTypes
 from telegram.constants import ParseMode
 from config import Session, logger, target
-from models import User
+import crud
 
 
-def user_exists(username, session):
-    existing_user = session.query(User).filter_by(username=username).first()
-    return existing_user is not None
+class GatheringInfoStatus(Enum):
+    CLIENT = 1
+    WHAT_TO_DO = 2
+    STATE_NUMBER_OR_VIN = 3
+    ALLOW_IMAGES = 4
+    WORK_ORDER = 5
+    SENSORS = 6
+    OTHER = 7
 
 
-def add_user_to_db(username, session):
-    user_db = User(username=username)
-    session.add(user_db)
-    session.commit()
+def white_list(func):
+
+    async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE, session: Session):
+        username = update.effective_user.username
+
+        if crud.user_exists(username, session):
+            return await func(update, context, session)
+        else:
+            responce = """Ты не был добавлен в белый список. Попроси администратора, чтобы тебя добавили.
+Как добавят, напиши /start"""
+            await context.bot.send_message(chat_id=update.message.chat_id, text=responce)
+            logger.info(f"Refused to user {update.effective_user.username}(not in white list)")
+            await send_init_mes(update, context)
+
+    return wrapper
+
+
+def superuser_list(func):
+
+    async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE, session: Session):
+        username = update.effective_user.username
+
+        if crud.is_superuser(username, session):
+            return await func(update, context, session)
+        else:
+            responce = "Вы не супер-пользоваталь. Мне очень жаль)"
+            await context.bot.send_message(chat_id=update.message.chat_id, text=responce)
+            logger.info(f"Refused to user {update.effective_user.username}(not Superuser)")
+            await send_init_mes(update, context)
+
+    return wrapper
+
+
+def db_session(bot_handler):
+
+    def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        session = Session()
+
+        try:
+            result = bot_handler(update, context, session)
+            session.commit()
+            return result
+        except Exception as e:
+            session.rollback()
+            raise e
+        finally:
+            session.close()
+
+    return wrapper
 
 
 async def send_init_mes(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -31,7 +82,8 @@ async def send_init_mes(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def get_text_and_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
-    if "allow_images" in context.user_data and context.user_data["allow_images"]:
+    if GatheringInfoStatus.ALLOW_IMAGES.value in context.user_data \
+            and context.user_data[GatheringInfoStatus.ALLOW_IMAGES.value]:
 
         try:
             file = update.message.photo[-1]
@@ -49,67 +101,8 @@ async def get_text_and_image(update: Update, context: ContextTypes.DEFAULT_TYPE)
     text = update.message.text
     if text:
         return text.strip()
+
     return None
-
-
-def get_all_users(session):
-    return session.query(User).all()
-
-
-def remove_users_from_db(usernames, session):
-
-    results = []
-
-    for username in usernames:
-        user = session.query(User).filter_by(username=username).first()
-
-        if user:
-            session.delete(user)
-            session.commit()
-            results.append(f"Пользователь '{username}' был удален из белого листа.")
-            logger.info(f"{username} was removed from white list")
-        else:
-            results.append(f"Пользователь '{username}' не был найден в белом листе.")
-
-    return results
-
-
-def white_list(func):
-
-    async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE, session: Session):
-        username = update.effective_user.username
-
-        if user_exists(username, session):
-            return await func(update, context, session)
-        else:
-            text = """Ты не был добавлен в белый список. Попроси администратора, чтобы тебя добавили.
-Как добавят, напиши /start"""
-            await context.bot.send_message(chat_id=update.message.chat_id, text=text)
-            logger.info(f"Refused to user {update.effective_user.username}(not in white list)")
-            await send_init_mes(update, context)
-
-    return wrapper
-
-
-def is_superuser(username, session):
-    user = session.query(User).filter_by(username=username).first()
-    return user is not None and user.superuser
-
-
-def superuser_list(func):
-
-    async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE, session: Session):
-        username = update.effective_user.username
-
-        if is_superuser(username, session):
-            return await func(update, context, session)
-        else:
-            text = "Вы не супер-пользоваталь. Мне очень жаль)"
-            await context.bot.send_message(chat_id=update.message.chat_id, text=text)
-            logger.info(f"Refused to user {update.effective_user.username}(not Superuser)")
-            await send_init_mes(update, context)
-
-    return wrapper
 
 
 def escape_markdown(text):
@@ -129,11 +122,12 @@ async def publish_post(update: Update, context: ContextTypes.DEFAULT_TYPE, revie
 
     post = ""
 
-    client = escape_markdown(context.user_data["client"])
-    what_to_do = escape_markdown(context.user_data["what_to_do"])
+    client = escape_markdown(context.user_data[GatheringInfoStatus.CLIENT.value])
+    what_to_do = escape_markdown(context.user_data[GatheringInfoStatus.WHAT_TO_DO.value])
+    state_number_or_vin = escape_markdown(context.user_data[GatheringInfoStatus.STATE_NUMBER_OR_VIN.value])
     images = "images" in context.user_data
-    sensors = escape_markdown(context.user_data["sensors"])
-    other = escape_markdown(context.user_data["other"])
+    sensors = escape_markdown(context.user_data[GatheringInfoStatus.SENSORS.value])
+    other = escape_markdown(context.user_data[GatheringInfoStatus.OTHER.value])
 
     user = update.effective_user
     username = escape_markdown(user.username)
@@ -146,6 +140,9 @@ async def publish_post(update: Update, context: ContextTypes.DEFAULT_TYPE, revie
 
     if client:
         post += f"*Клиент*: {client}\n"
+
+    if state_number_or_vin:
+        post += f"*Гос. номер или VIN*: {state_number_or_vin}\n"
 
     if sensors:
         post += f"*Датчики*: {sensors}\n"
@@ -182,21 +179,3 @@ async def publish_post(update: Update, context: ContextTypes.DEFAULT_TYPE, revie
         return 0
 
     return 1
-
-
-def db_session(bot_handler):
-
-    def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE):
-        session = Session()
-
-        try:
-            result = bot_handler(update, context, session)
-            session.commit()
-            return result
-        except Exception as e:
-            session.rollback()
-            raise e
-        finally:
-            session.close()
-
-    return wrapper
