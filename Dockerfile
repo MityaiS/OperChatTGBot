@@ -1,4 +1,4 @@
-FROM python
+FROM python:3.11
 
 RUN mkdir -p /home/OperChatBot
 COPY ./app /home/OperChatBot/app
